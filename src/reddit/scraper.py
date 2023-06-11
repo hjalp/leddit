@@ -1,44 +1,77 @@
-from typing import List
+import re
+from datetime import datetime
+from typing import List, Optional
 
-import requests
-from bs4 import BeautifulSoup
+import feedparser
+from bs4 import BeautifulSoup, Tag
+from markdownify import markdownify
+from requests import Session as HttpSession, HTTPError
 
-from src.models.models import Post
+from src.models.models import PostDTO
+
+_SUBREDDIT_REGEX = re.compile(r'path.com/r/([^/]+)/.*')
+_STRIP_EMPTY_REGEX = re.compile(r'\n{3,}')
+
+SORT_HOT = 'hot'
+SORT_NEW = 'new'
 
 
-def get_subreddit_topics(subreddit: str, new=True) -> List[Post]:
-    if new:
-        # use www.reddit.com - harder, but potentially longer lived.
-        return get_subreddit_topics_new(subreddit)
+def get_subreddit_topics(subreddit: str, session: HttpSession, mode: str = SORT_HOT,
+                         since: Optional[datetime] = None) -> List[PostDTO]:
+    if mode == SORT_NEW:
+        feed_url = f"https://www.reddit.com/r/{subreddit}/new/.rss?sort=new"
     else:
-        # use old.reddit.com
-        pass
+        feed_url = f"https://www.reddit.com/r/{subreddit}/.rss"
+
+    feed = feedparser.parse(session.get(feed_url).text)
+
+    posts = []
+    for entry in feed.entries:
+        created = datetime.strptime(entry.published, "%Y-%m-%dT%H:%M:%S%z")
+        updated = datetime.strptime(entry.updated, "%Y-%m-%dT%H:%M:%S%z")
+        if not since or updated > since:
+            posts.append(
+                PostDTO(reddit_link=entry.link, title=entry.title, created=created, updated=updated,
+                        author=entry.author))
+    return posts
 
 
-def get_subreddit_topics_new(subreddit: str) -> List[Post]:
-    url = f"https://www.reddit.com/r/{subreddit}"
+def get_post_details(post: PostDTO, session: HttpSession) -> PostDTO:
+    old_url = post.reddit_link.replace('www', 'old')
+    response = session.get(old_url)
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
-    }
+    if 'over18' in response.url:
+        response = session.post(response.url, {'over18': 'yes'})
 
-    response = requests.get(url, headers=headers)
-    response.raise_for_status()
+    if response.status_code != 200:
+        raise HTTPError("Couldn't retrieve post detail page")
 
     soup = BeautifulSoup(response.text, "html.parser")
 
-    posts = []
+    # Extract the body text if it exists
+    body_text = soup.select_one('.expando form .md')
+    post.body = html_node_to_markdown(body_text) if body_text else None
 
-    post_elements = soup.select('*[data-adclicklocation="background"][data-click-id="background"]')
-    for post_element in post_elements:
-        title_element = post_element.select_one('*[data-adclicklocation="title"] a')
-        user_element = post_element.select_one('a[data-click-id="user"]')
+    # Extract other properties
+    post_info = soup.select_one('div[data-timestamp][data-author][data-nsfw]')
+    post.nsfw = post_info['data-nsfw'] != 'false'
+    post.external_link = None if post_info['data-url'].startswith('/r/') else post_info['data-url']
 
-        title = title_element.get_text()
-        link = title_element["href"]
-        user = user_element.get_text() if user_element else None
+    return post
 
-        if link.startswith("/r/"):
-            posts.append(Post(title=title, link=link, author=user))
 
-    return posts
+def get_subreddit_ident(link: str) -> str:
+    """Extract the subreddit string from a path post"""
+    match = _SUBREDDIT_REGEX.search(link)
+    if match:
+        return match.group(1)
+    else:
+        raise ValueError("No subreddit found in the reddit_link")
+
+
+def html_node_to_markdown(source: Tag) -> Optional[str]:
+    """Convert the contents of a BeautifulSoup tag into markdown"""
+    html = str(source).replace('\u200B', '')
+    markdown = markdownify(html)
+
+    return _STRIP_EMPTY_REGEX.sub('\n\n', markdown) if markdown else None
