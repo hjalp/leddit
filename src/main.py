@@ -38,15 +38,24 @@ def add_community(name, reddit):
 def scrape_communities():
     """Scrape all communities in the database."""
     communities = db_session.query(Community).all()
-    for community in communities:
+
+    delay_time = 6
+    max_index = len(communities) - 1
+
+    for index, community in enumerate(communities):
+        iteration_start_time = time.time()
         click.echo(f'Scraping subreddit: {community.name}')
         posts = get_subreddit_topics(community.path, http_session, mode=SORT_NEW)
         for post in posts:
             click.echo(post)
 
-        # details = get_post_details(posts[4], http_session)
+        # details = get_post_details(posts[0], http_session)
+        # pprint.pprint(details)
 
-        time.sleep(6)  # Don't do this when last.
+        if index < max_index:
+            delay = delay_time - (time.time() - iteration_start_time)
+            click.echo(f'Waiting for {delay} seconds')
+            time.sleep(delay)
 
 
 def initialize_database(database_url):
