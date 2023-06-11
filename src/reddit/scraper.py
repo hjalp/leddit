@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup, Tag
 from markdownify import markdownify
 from requests import Session as HttpSession, HTTPError
 
-from src.models.models import PostDTO
+from models.models import PostDTO
 
 _SUBREDDIT_REGEX = re.compile(r'path.com/r/([^/]+)/.*')
 _STRIP_EMPTY_REGEX = re.compile(r'\n{3,}')
@@ -50,7 +50,7 @@ def get_post_details(post: PostDTO, session: HttpSession) -> PostDTO:
 
     # Extract the body text if it exists
     body_text = soup.select_one('.expando form .md')
-    post.body = html_node_to_markdown(body_text) if body_text else None
+    post.body = _html_node_to_markdown(body_text) if body_text else None
 
     # Extract other properties
     post_info = soup.select_one('div[data-timestamp][data-author][data-nsfw]')
@@ -69,7 +69,7 @@ def get_subreddit_ident(link: str) -> str:
         raise ValueError("No subreddit found in the reddit_link")
 
 
-def html_node_to_markdown(source: Tag) -> Optional[str]:
+def _html_node_to_markdown(source: Tag) -> Optional[str]:
     """Convert the contents of a BeautifulSoup tag into markdown"""
     html = str(source).replace('\u200B', '')
     markdown = markdownify(html)

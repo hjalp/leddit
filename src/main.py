@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import sys
 import time
@@ -11,7 +12,7 @@ from sqlalchemy.orm import sessionmaker, Session as DbSession
 
 from models.models import Base, Community
 from reddit.scraper import get_subreddit_topics, SORT_NEW
-from src.utils import USER_AGENT
+from utils import USER_AGENT
 
 db_session: DbSession
 http_session: HttpSession
