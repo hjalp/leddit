@@ -50,20 +50,22 @@ class Post(Base):
 
     id: int = Column(Integer, primary_key=True)
     reddit_link: str = Column(String)
+    lemmy_link: str = Column(String)
     updated: datetime = Column(DateTime)
     nsfw: bool = Column(Boolean)
     community_id: int = Column(Integer, ForeignKey('communities.id'))
 
     community: Mapped[Community] = relationship('Community')
 
-    def __init__(self, reddit_link: str, community: Community, updated: datetime, nsfw: bool):
+    def __init__(self, reddit_link: str, lemmy_link: str, community: Community, updated: datetime, nsfw: bool):
         self.reddit_link = reddit_link
+        self.lemmy_link = lemmy_link
         self.community = community
         self.updated = updated
         self.nsfw = nsfw
 
     def __str__(self) -> str:
-        return f"'{self.title}' on {self.link} by {self.author if self.author else 'unknown'}"
+        return f"'#{self.id}: {self.title}' on {self.community.name}"
 
     @classmethod
     def from_dto(cls, post: PostDTO, community: Community) -> 'Post':

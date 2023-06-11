@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import os
 import sys
-import time
 
 import click
 import requests
@@ -10,12 +9,14 @@ from requests import Session as HttpSession
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session as DbSession
 
+from lemmy.api import LemmyAPI
 from models.models import Base, Community
-from reddit.scraper import get_subreddit_topics, SORT_NEW
 from utils import USER_AGENT
+from utils.queue import run_scraper
 
 db_session: DbSession
 http_session: HttpSession
+lemmy_api: LemmyAPI
 
 
 @click.group()
@@ -37,33 +38,15 @@ def add_community(name, reddit):
 @cli.command()
 def scrape_communities():
     """Scrape all communities in the database."""
-    communities = db_session.query(Community).all()
-
-    delay_time = 6
-    max_index = len(communities) - 1
-
-    for index, community in enumerate(communities):
-        iteration_start_time = time.time()
-        click.echo(f'Scraping subreddit: {community.name}')
-        posts = get_subreddit_topics(community.path, http_session, mode=SORT_NEW)
-        for post in posts:
-            click.echo(post)
-
-        # details = get_post_details(posts[0], http_session)
-        # pprint.pprint(details)
-
-        delay = delay_time - (time.time() - iteration_start_time)
-        if index < max_index and delay > 0:
-            click.echo(f'Waiting for {delay} seconds')
-            time.sleep(delay)
+    run_scraper(db_session, http_session)
 
 
-def initialize_database(database_url):
+def initialize_database(db_url):
     """Initialize the database if it doesn't exist and run migrations."""
-    engine = create_engine(database_url)
+    global db_session
+    engine = create_engine(db_url)
     Base.metadata.create_all(engine)
     session = sessionmaker(bind=engine)
-    global db_session
     db_session = session()
 
 
@@ -75,11 +58,20 @@ def initialize_http_session():
 
 if __name__ == '__main__':
     load_dotenv()
+
+    for var_name in ['DATABASE_URL', 'LEMMY_BASE_URI', 'LEMMY_USERNAME', 'LEMMY_PASSWORD']:
+        if not os.getenv(var_name):
+            print(f'Error: {var_name} environment variable is not set.')
+            sys.exit(1)
+
     database_url = os.getenv('DATABASE_URL')
-    if not database_url:
-        print('Error: DATABASE_URL environment variable is not set.')
-        sys.exit(1)
+    lemmy_base_uri = os.getenv('LEMMY_BASE_URI')
+    lemmy_username = os.getenv('LEMMY_USERNAME')
+    lemmy_password = os.getenv('LEMMY_PASSWORD')
 
     initialize_database(database_url)
     initialize_http_session()
+    lemmy_api = LemmyAPI(base_url=lemmy_base_uri)
+    # foo = lemmy_api.login(lemmy_username, lemmy_password)
+
     cli()
