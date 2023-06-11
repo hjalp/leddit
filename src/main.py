@@ -52,8 +52,8 @@ def scrape_communities():
         # details = get_post_details(posts[0], http_session)
         # pprint.pprint(details)
 
-        if index < max_index:
-            delay = delay_time - (time.time() - iteration_start_time)
+        delay = delay_time - (time.time() - iteration_start_time)
+        if index < max_index and delay > 0:
             click.echo(f'Waiting for {delay} seconds')
             time.sleep(delay)
 

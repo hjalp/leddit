@@ -36,8 +36,9 @@ class PostDTO:
     title: str
     created: datetime
     updated: datetime
-    author: Optional[str] = None
+    author: str
     external_link: Optional[str] = None
+    body: Optional[str] = None
     nsfw: bool = False
 
     def __str__(self) -> str:
