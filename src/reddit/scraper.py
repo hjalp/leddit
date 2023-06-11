@@ -70,7 +70,13 @@ def get_subreddit_ident(link: str) -> str:
 
 
 def _html_node_to_markdown(source: Tag) -> Optional[str]:
-    """Convert the contents of a BeautifulSoup tag into markdown"""
+    """Convert the contents of a BeautifulSoup Tag into markdown"""
+    # Make all links absolute
+    for link in source.find_all('a', href=True):
+        if str(link['href']).startswith('/'):
+            link['href'] = 'https://old.reddit.com' + link['href']
+
+    # Remove extraneous empty paragraphs
     html = str(source).replace('\u200B', '')
     markdown = markdownify(html)
 
