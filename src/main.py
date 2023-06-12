@@ -3,20 +3,18 @@ import os
 import sys
 
 import click
-import requests
 from dotenv import load_dotenv
-from requests import Session as HttpSession
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session as DbSession
 
 from lemmy.api import LemmyAPI
 from models.models import Base, Community
-from utils import USER_AGENT
+from reddit.reader import RedditReader
 from utils.queue import run_scraper
 
 db_session: DbSession
-http_session: HttpSession
 lemmy_api: LemmyAPI
+reddit_scraper: RedditReader
 
 
 @click.group()
@@ -38,7 +36,7 @@ def add_community(name, reddit):
 @cli.command()
 def scrape_communities():
     """Scrape all communities in the database."""
-    run_scraper(db_session, http_session)
+    run_scraper(db_session, reddit_scraper)
 
 
 def initialize_database(db_url):
@@ -50,18 +48,12 @@ def initialize_database(db_url):
     db_session = session()
 
 
-def initialize_http_session():
-    global http_session
-    http_session = requests.Session()
-    http_session.headers.update({'User-Agent': USER_AGENT})
-
-
 if __name__ == '__main__':
     load_dotenv()
 
     for var_name in ['DATABASE_URL', 'LEMMY_BASE_URI', 'LEMMY_USERNAME', 'LEMMY_PASSWORD']:
         if not os.getenv(var_name):
-            print(f'Error: {var_name} environment variable is not set.')
+            click.echo(f'Error: {var_name} environment variable is not set.')
             sys.exit(1)
 
     database_url = os.getenv('DATABASE_URL')
@@ -70,8 +62,8 @@ if __name__ == '__main__':
     lemmy_password = os.getenv('LEMMY_PASSWORD')
 
     initialize_database(database_url)
-    initialize_http_session()
     lemmy_api = LemmyAPI(base_url=lemmy_base_uri)
+    reddit_scraper = RedditReader()
     # foo = lemmy_api.login(lemmy_username, lemmy_password)
 
     cli()
