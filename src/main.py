@@ -24,10 +24,10 @@ def cli():
 
 @cli.command()
 @click.option('--name', prompt=True, help='Name of the subreddit')
-@click.option('--path', prompt=True, help='Path to the subreddit')
-def add_community(name, reddit):
+def add_community(name):
     """Add a new subreddit to the database."""
-    community = Community(name=name, path=reddit)
+    # TODO: properly implement (including icon fetching)
+    community = Community(ident=name)
     db_session.add(community)
     db_session.commit()
     click.echo('Community added successfully.')
@@ -36,7 +36,7 @@ def add_community(name, reddit):
 @cli.command()
 def scrape_communities():
     """Scrape all communities in the database."""
-    run_scraper(db_session, reddit_scraper)
+    run_scraper(db_session, reddit_scraper, lemmy_api)
 
 
 def initialize_database(db_url):
@@ -58,12 +58,9 @@ if __name__ == '__main__':
 
     database_url = os.getenv('DATABASE_URL')
     lemmy_base_uri = os.getenv('LEMMY_BASE_URI')
-    lemmy_username = os.getenv('LEMMY_USERNAME')
-    lemmy_password = os.getenv('LEMMY_PASSWORD')
 
     initialize_database(database_url)
-    lemmy_api = LemmyAPI(base_url=lemmy_base_uri)
+    lemmy_api = LemmyAPI(base_url=lemmy_base_uri, username=os.getenv('LEMMY_USERNAME'), password=os.getenv('LEMMY_PASSWORD'))
     reddit_scraper = RedditReader()
-    # foo = lemmy_api.login(lemmy_username, lemmy_password)
 
     cli()

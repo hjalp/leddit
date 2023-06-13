@@ -15,19 +15,13 @@ class Community(Base):
     __tablename__: str = 'communities'
 
     id: int = Column(Integer, primary_key=True)
-    name: str = Column(String)
-    path: str = Column(String)
+    lemmy_id: int = Column(Integer)
+    ident: str = Column(String)
     nsfw: bool = Column(Boolean)
     last_scrape: datetime = Column(DateTime)
 
-    def __init__(self, name: str, path: str, nsfw: bool, last_scrape: datetime):
-        self.name = name
-        self.path = path
-        self.nsfw = nsfw
-        self.last_scrape = last_scrape
-
     def __str__(self) -> str:
-        return f"{self.name} path:{self.path}"
+        return f"{self.ident} path:{self.path}"
 
 
 @dataclass
@@ -56,13 +50,6 @@ class Post(Base):
     community_id: int = Column(Integer, ForeignKey('communities.id'))
 
     community: Mapped[Community] = relationship('Community')
-
-    def __init__(self, reddit_link: str, lemmy_link: str, community: Community, updated: datetime, nsfw: bool):
-        self.reddit_link = reddit_link
-        self.lemmy_link = lemmy_link
-        self.community = community
-        self.updated = updated
-        self.nsfw = nsfw
 
     def __str__(self) -> str:
         return f"'#{self.id}: {self.title}' on {self.community.name}"
