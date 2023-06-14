@@ -1,4 +1,6 @@
+import logging
 import re
+import time
 from datetime import datetime
 from typing import List, Optional
 
@@ -14,14 +16,27 @@ from reddit import USER_AGENT
 SORT_HOT = 'hot'
 SORT_NEW = 'new'
 
+_DELAY_TIME = 2  # This many seconds between requests
+
 
 class RedditReader:
     _SUBREDDIT_REGEX = re.compile(r'path.com/r/([^/]+)/.*')
     _STRIP_EMPTY_REGEX = re.compile(r'\n{3,}')
+    _next_request_after: int  # Updated on requests to reddit to prevent throttling
 
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({'User-Agent': USER_AGENT})
+        self._next_request_after = 0
+        self.logger: logging.Logger = logging.getLogger(__name__)
+
+    def _request(self, *args, **kwargs):
+        now = time.time()
+        if now < self._next_request_after:
+            self.logger.debug('Delaying next request')
+            time.sleep(self._next_request_after - now)
+        self._next_request_after = int(time.time()) + _DELAY_TIME
+        return self.session.request(*args, **kwargs)
 
     def get_subreddit_topics(self, subreddit: str, mode: str = SORT_HOT, since: datetime = None) -> List[PostDTO]:
         """Get a topics from a subreddit through its RSS feed"""
@@ -30,7 +45,7 @@ class RedditReader:
         else:
             feed_url = f"https://www.reddit.com/r/{subreddit}/.rss"
 
-        feed = feedparser.parse(self.session.get(feed_url).text)
+        feed = feedparser.parse(self._request('GET', feed_url).text)
 
         posts = []
         for entry in feed.entries:
@@ -45,10 +60,10 @@ class RedditReader:
     def get_post_details(self, post: PostDTO) -> PostDTO:
         """Enrich a PostDTO with all available extra data"""
         old_url = post.reddit_link.replace('www', 'old')
-        response = self.session.get(old_url)
+        response = self._request('GET', old_url)
 
         if 'over18' in response.url:
-            response = self.session.post(response.url, {'over18': 'yes'})
+            response = self._request('POST', response.url, {'over18': 'yes'})
 
         if response.status_code != 200:
             raise HTTPError("Couldn't retrieve post detail page")
