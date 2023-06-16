@@ -2,41 +2,19 @@
 import logging
 import os
 import sys
+import time
 
-import click
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from lemmy.api import LemmyAPI
-from models.models import Base, Community
+from models.models import Base
 from reddit.reader import RedditReader
 from utils.queue import Syncer
 
 syncer: Syncer
 logging.basicConfig(level=logging.DEBUG)
-
-
-@click.group()
-def cli():
-    """CLI commands for managing communities."""
-
-
-@cli.command()
-@click.option('--name', prompt=True, help='Name of the subreddit')
-def add_community(name):
-    """Add a new subreddit to the database."""
-    # TODO: properly implement (including icon fetching)
-    community = Community(ident=name)
-    db_session.add(community)
-    db_session.commit()
-    click.echo('Community added successfully.')
-
-
-@cli.command()
-def scrape_communities():
-    """Scrape all communities in the database."""
-    syncer.run_scraper()
 
 
 def initialize_database(db_url):
@@ -52,7 +30,7 @@ if __name__ == '__main__':
 
     for var_name in ['DATABASE_URL', 'LEMMY_BASE_URI', 'LEMMY_USERNAME', 'LEMMY_PASSWORD']:
         if not os.getenv(var_name):
-            click.echo(f'Error: {var_name} environment variable is not set.')
+            logging.error(f'Error: {var_name} environment variable is not set.')
             sys.exit(1)
 
     database_url = os.getenv('DATABASE_URL')
@@ -64,4 +42,6 @@ if __name__ == '__main__':
     reddit_scraper = RedditReader()
     syncer = Syncer(db=db_session, reddit_reader=reddit_scraper, lemmy=lemmy_api)
 
-    cli()
+    while True:
+        syncer.scrape_new_posts()
+        time.sleep(2)

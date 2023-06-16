@@ -1,36 +1,40 @@
 import logging
-import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from operator import attrgetter
-from typing import Type, List
+from typing import Type, List, Optional
 
-import click
+from sqlalchemy import or_
 from sqlalchemy.orm import Session as DbSession
 
 from lemmy.api import LemmyAPI
 from models.models import Community, PostDTO, Post
 from reddit.reader import RedditReader, SORT_HOT
 
-_DELAY_TIME = 6  # delay between RSS requests in seconds
-
-
-# TODO: Work on a tick-basis
 
 class Syncer:
-    def __init__(self, db: DbSession, reddit_reader: RedditReader, lemmy: LemmyAPI):
+    interval: int = 90  # Time between updates per subreddit
+
+    def __init__(self, db: DbSession, reddit_reader: RedditReader, lemmy: LemmyAPI, interval: int = 300):
         self._db: DbSession = db
         self._reddit_reader: RedditReader = reddit_reader
         self._lemmy: LemmyAPI = lemmy
         self._logger = logging.getLogger(__name__)
+        self.interval = interval
 
-    def get_community_scrape_queue(self) -> list[Type[Community]]:
-        """Get a batch of communities that are due for scraping."""
-        return self._db.query(Community).all()
+    def next_scrape_community(self) -> Optional[Type[Community]]:
+        """Get the next community that is due for scraping."""
+        return self._db.query(Community) \
+            .filter(or_(
+            Community.last_scrape <= datetime.utcnow() - timedelta(seconds=self.interval), \
+            Community.last_scrape.is_(None) \
+            )) \
+            .order_by(Community.last_scrape) \
+            .first()
 
-    def run_scraper(self):
-        communities = self.get_community_scrape_queue()  # just grab one plox
+    def scrape_new_posts(self):
+        community = self.next_scrape_community()
 
-        for index, community in enumerate(communities):
+        if community:
             self._logger.info(f'Scraping subreddit: {community.ident}')
             posts = self._reddit_reader.get_subreddit_topics(community.ident, mode=SORT_HOT)
             posts = self.filter_posted(posts)
@@ -39,7 +43,7 @@ class Syncer:
             posts = sorted(posts, key=attrgetter('updated'))
 
             for post in posts:
-                click.echo(post)
+                self._logger.info(post)
                 post = self._reddit_reader.get_post_details(post)
                 self.clone_to_lemmy(post, community)
 
@@ -47,6 +51,8 @@ class Syncer:
             community.last_scrape = datetime.utcnow()
             self._db.add(community)
             self._db.commit()
+        else:
+            self._logger.info('No community due for update')
 
     def filter_posted(self, posts: List[PostDTO]) -> List[PostDTO]:
         """Filter out any posts that have already been synced to Lemmy"""
@@ -58,6 +64,7 @@ class Syncer:
         return filtered_posts
 
     def clone_to_lemmy(self, post: PostDTO, community: Community):
+        post = self.prepare_post(post, community)
         try:
             lemmy_post = self._lemmy.create_post(
                 community_id=community.lemmy_id,
@@ -78,3 +85,15 @@ class Syncer:
             self._db.commit()
         except Exception as e:
             print(f"Couldn't save {post.reddit_link} to local database. MUST REMOVE FROM LEMMY OR ELSE. {str(e)}")
+
+    @staticmethod
+    def prepare_post(post: PostDTO, community: Community) -> PostDTO:
+        prefix = f"""##### This is an automated archive made by the [Lemmit Bot](https://lemmit.online/).
+The original was posted on the [/r/{community.ident}]({post.reddit_link.replace('https://www.', 'https://old.')}) subreddit on {post.created}.\n\n"""
+        if len(post.title) >= 200:
+            prefix = prefix + f"**Original Title**: {post.title}\n"
+            post.title = post.title[:196] + '...'
+
+        post.body = prefix + ('***\n' + post.body if post.body else '')
+
+        return post

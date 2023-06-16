@@ -16,7 +16,7 @@ from reddit import USER_AGENT
 SORT_HOT = 'hot'
 SORT_NEW = 'new'
 
-_DELAY_TIME = 2  # This many seconds between requests
+_DELAY_TIME = 3  # This many seconds between requests
 
 
 class RedditReader:
