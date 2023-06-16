@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from lemmy.api import LemmyAPI
 from models.models import Community, PostDTO, Post
-from reddit.reader import RedditReader, SORT_HOT
+from reddit.reader import RedditReader, SORT_HOT, SORT_NEW
 
 
 class Syncer:
@@ -36,7 +36,7 @@ class Syncer:
 
         if community:
             self._logger.info(f'Scraping subreddit: {community.ident}')
-            posts = self._reddit_reader.get_subreddit_topics(community.ident, mode=SORT_HOT)
+            posts = self._reddit_reader.get_subreddit_topics(community.ident, mode=SORT_NEW)
             posts = self.filter_posted(posts)
 
             # Handle oldest entries first.
@@ -74,7 +74,7 @@ class Syncer:
                 nsfw=post.nsfw
             )
         except Exception as e:
-            print(f"Something went horribly wrong when parsing {post.reddit_link}: {str(e)}")
+            print(f"Something went horribly wrong when parsing {post.reddit_link}: {str(e)}: {str(e.response.content)}")
             return
 
         # Save post
@@ -89,11 +89,14 @@ class Syncer:
     @staticmethod
     def prepare_post(post: PostDTO, community: Community) -> PostDTO:
         prefix = f"""##### This is an automated archive made by the [Lemmit Bot](https://lemmit.online/).
-The original was posted on the [/r/{community.ident}]({post.reddit_link.replace('https://www.', 'https://old.')}) subreddit on {post.created}.\n\n"""
+The original was posted on [/r/{community.ident}]({post.reddit_link.replace('https://www.', 'https://old.')}) by [{post.author}](https://old.reddit.com{post.author}) on {post.created}.\n"""
         if len(post.title) >= 200:
-            prefix = prefix + f"**Original Title**: {post.title}\n"
+            prefix = prefix + f"\n**Original Title**: {post.title}\n"
             post.title = post.title[:196] + '...'
 
         post.body = prefix + ('***\n' + post.body if post.body else '')
+
+        if len(post.body) > 10000:
+            post.body = post.body[:9800] + '...\n***\nContent cut off. Read original on ' + post.reddit_link
 
         return post
