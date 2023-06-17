@@ -1,3 +1,4 @@
+alembic==1.11.1
 beautifulsoup4==4.12.2
 certifi==2023.5.7
 charset-normalizer==3.1.0

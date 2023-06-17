@@ -65,7 +65,7 @@ class LemmyAPI:
             self.login()
 
     def __is_token_near_expiry(self) -> bool:
-        if self.__jwt is '':
+        if self.__jwt == '':
             return True
         decoded_token = jwt.decode(self.__jwt, algorithms=['HS256'], options={"verify_signature": False})
         current_timestamp = int(time.time())
