@@ -36,7 +36,12 @@ class Syncer:
 
         if community:
             self._logger.info(f'Scraping subreddit: {community.ident}')
-            posts = self._reddit_reader.get_subreddit_topics(community.ident, mode=SORT_NEW)
+            try:
+                posts = self._reddit_reader.get_subreddit_topics(community.ident, mode=SORT_NEW)
+            except BaseException as e:
+                self._logger.error(f"Error trying to retrieve topics: {str(e)}")
+                return
+
             posts = self.filter_posted(posts)
 
             # Handle oldest entries first.
@@ -44,7 +49,11 @@ class Syncer:
 
             for post in posts:
                 self._logger.info(post)
-                post = self._reddit_reader.get_post_details(post)
+                try:
+                    post = self._reddit_reader.get_post_details(post)
+                except BaseException as e:
+                    self._logger.error(f"Error trying to retrieve post details, try again in a bit; {str(e)}")
+                    return
                 self.clone_to_lemmy(post, community)
 
             self._logger.info(f'Done.')
@@ -74,7 +83,9 @@ class Syncer:
                 nsfw=post.nsfw
             )
         except Exception as e:
-            print(f"Something went horribly wrong when parsing {post.reddit_link}: {str(e)}: {str(e.response.content)}")
+            self._logger.error(
+                f"Something went horribly wrong when parsing {post.reddit_link}: {str(e)}: {str(e.response.content)}"
+            )
             return
 
         # Save post

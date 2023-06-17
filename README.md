@@ -3,8 +3,7 @@
 A Reddit-to-Lemmy cross-poster.
 
 ## To do:
-- TESTS!
-- Dockerize
+- MORE TESTS!
 - monitor `!requests` community for new subreddits to sync
 - Create a watcher that periodically checks for updates (edits / deletes) on reddit post and sync those:
   * 1 hour, day, week, month after posting.

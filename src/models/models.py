@@ -3,8 +3,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Column, DateTime, Integer, String, ForeignKey, Boolean
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, Mapped
+from sqlalchemy.orm import relationship, Mapped, declarative_base
 
 Base = declarative_base()
 
@@ -15,10 +14,10 @@ class Community(Base):
     __tablename__: str = 'communities'
 
     id: int = Column(Integer, primary_key=True)
-    lemmy_id: int = Column(Integer)
-    ident: str = Column(String)
-    nsfw: bool = Column(Boolean)
-    last_scrape: datetime = Column(DateTime)
+    lemmy_id: int = Column(Integer, nullable=False)
+    ident: str = Column(String, nullable=False)
+    nsfw: bool = Column(Boolean, nullable=False, default=False)
+    last_scrape: datetime = Column(DateTime, nullable=True)
 
     def __str__(self) -> str:
         return f"{self.ident} path:{self.path}"
@@ -43,11 +42,11 @@ class Post(Base):
     __tablename__: str = 'posts'
 
     id: int = Column(Integer, primary_key=True)
-    reddit_link: str = Column(String)
-    lemmy_link: str = Column(String)
-    updated: datetime = Column(DateTime)
-    nsfw: bool = Column(Boolean)
-    community_id: int = Column(Integer, ForeignKey('communities.id'))
+    reddit_link: str = Column(String, nullable=False)
+    lemmy_link: str = Column(String, nullable=False)
+    updated: datetime = Column(DateTime, nullable=False)
+    nsfw: bool = Column(Boolean, nullable=False)
+    community_id: int = Column(Integer, ForeignKey('communities.id'), nullable=False)
 
     community: Mapped[Community] = relationship('Community')
 
