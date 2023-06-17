@@ -6,7 +6,8 @@ from requests import HTTPError, Response
 from sqlalchemy.orm import Session
 
 from lemmy.api import LemmyAPI
-from reddit.reader import RedditReader, SORT_NEW
+from reddit.reader import RedditReader
+from models.models import SORT_NEW
 from tests import TEST_COMMUNITY, TEST_POSTS, LEMMY_POST_RETURN
 from utils.syncer import Syncer
 

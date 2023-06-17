@@ -7,6 +7,9 @@ from sqlalchemy.orm import relationship, Mapped, declarative_base
 
 Base = declarative_base()
 
+SORT_HOT = 'hot'
+SORT_NEW = 'new'
+
 
 class Community(Base):
     """Represents a community/subreddit on both Lemmy and Reddit"""
@@ -18,6 +21,8 @@ class Community(Base):
     ident: str = Column(String, nullable=False)
     nsfw: bool = Column(Boolean, nullable=False, default=False)
     last_scrape: datetime = Column(DateTime, nullable=True)
+    enabled: bool = Column(Boolean, nullable=False, server_default='1')
+    sorting: str = Column(String(length=10), nullable=False, server_default='hot')
 
     def __str__(self) -> str:
         return f"{self.ident} path:{self.path}"

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from lemmy.api import LemmyAPI
 from models.models import Community, PostDTO, Post
-from reddit.reader import RedditReader, SORT_HOT, SORT_NEW
+from reddit.reader import RedditReader
 
 
 class Syncer:
@@ -24,10 +24,13 @@ class Syncer:
     def next_scrape_community(self) -> Optional[Type[Community]]:
         """Get the next community that is due for scraping."""
         return self._db.query(Community) \
-            .filter(or_(
-            Community.last_scrape <= datetime.utcnow() - timedelta(seconds=self.interval), \
-            Community.last_scrape.is_(None) \
-            )) \
+            .filter(
+                Community.enabled.is_(True),
+                or_(
+                    Community.last_scrape <= datetime.utcnow() - timedelta(seconds=self.interval),
+                    Community.last_scrape.is_(None)
+                )
+            ) \
             .order_by(Community.last_scrape) \
             .first()
 
@@ -37,7 +40,7 @@ class Syncer:
         if community:
             self._logger.info(f'Scraping subreddit: {community.ident}')
             try:
-                posts = self._reddit_reader.get_subreddit_topics(community.ident, mode=SORT_NEW)
+                posts = self._reddit_reader.get_subreddit_topics(community.ident, mode=community.sorting)
             except BaseException as e:
                 self._logger.error(f"Error trying to retrieve topics: {str(e)}")
                 return

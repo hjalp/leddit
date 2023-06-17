@@ -10,11 +10,8 @@ from bs4 import BeautifulSoup, Tag
 from markdownify import markdownify
 from requests import HTTPError
 
-from models.models import PostDTO
+from models.models import PostDTO, SORT_HOT, SORT_NEW
 from reddit import USER_AGENT
-
-SORT_HOT = 'hot'
-SORT_NEW = 'new'
 
 _DELAY_TIME = 3  # This many seconds between requests
 
