@@ -22,9 +22,13 @@ class LemmyAPI:
 
         if auth_required:
             self.update_auth()
+        if self.__jwt:
             data['auth'] = self.__jwt
 
-        response = requests.request(method, url, json=data, headers=headers)
+        if method == 'GET':
+            response = requests.request(method, url, params=data, headers=headers)
+        else:
+            response = requests.request(method, url, json=data, headers=headers)
         response.raise_for_status()
         return response.json()
 
@@ -36,6 +40,12 @@ class LemmyAPI:
             raise RuntimeError("Could not login", response)
         self.__jwt = response['jwt']
 
+    def create_comment(self, post_id: int, content: str, parent_id: int = None, form_id: str = None, language_id: str = None) -> Dict:
+        data = {'post_id': post_id, 'content': content}
+        self.__update_payload({'parent_id': parent_id, 'form_id': form_id, 'language_id': language_id}, data)
+
+        return self._make_request('POST', '/comment', data, auth_required=True)
+
     def create_post(self, community_id: int, name: str, body: Optional[str] = None, url: Optional[str] = None,
                     nsfw: bool = False, language_id: int = None) -> Dict:
         data = {'community_id': community_id, 'name': name}
@@ -45,7 +55,7 @@ class LemmyAPI:
         return self._make_request('POST', '/post', data, auth_required=True)
 
     def create_community(self, name: str, title: str, description: str = None, icon: str = None, nsfw: bool = False,
-                         posting_restricted_to_mods: bool = True):
+                         posting_restricted_to_mods: bool = True) -> Dict:
         data = {'name': name, 'title': title}
         self.__update_payload(
             {'description': description, 'icon': icon, 'nsfw': nsfw,
@@ -55,8 +65,18 @@ class LemmyAPI:
 
         return self._make_request('POST', '/community', data, auth_required=True)
 
+    def get_posts(self, community_name: str = None, community_id: int = None, limit: int = None, page: int = None,
+                  sort: str = 'New', auth_required: bool = False) -> Dict:
+        data = self.__update_payload({}, {'community_name': community_name, 'community_id': community_id, 'limit': limit,
+                                   'page': page, 'sort': sort})
+
+        return self._make_request('GET', '/post/list', data=data, auth_required=auth_required)
+
+    def mark_post_as_read(self, post_id: int, read: bool = True) -> Dict:
+        return self._make_request('POST', '/post/mark_as_read', {'post_id': post_id, 'read': read}, auth_required=True)
+
     def get_info(self):
-        """Returns"""
+        """Returns Instance info"""
         return self._make_request('GET', '/site', auth_required=False)
 
     def update_auth(self):

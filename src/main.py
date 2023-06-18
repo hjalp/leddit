@@ -43,13 +43,15 @@ if __name__ == '__main__':
 
     database_url = os.getenv('DATABASE_URL')
     lemmy_base_uri = os.getenv('LEMMY_BASE_URI')
+    request_community = os.getenv('REQUEST_COMMUNITY', None)
 
     db_session = initialize_database(database_url)
     lemmy_api = LemmyAPI(base_url=lemmy_base_uri, username=os.getenv('LEMMY_USERNAME'),
                          password=os.getenv('LEMMY_PASSWORD'))
     reddit_scraper = RedditReader()
-    syncer = Syncer(db=db_session, reddit_reader=reddit_scraper, lemmy=lemmy_api)
+    syncer = Syncer(db=db_session, reddit_reader=reddit_scraper, lemmy=lemmy_api, request_community=request_community)
 
     while True:
+        syncer.check_new_subs()
         syncer.scrape_new_posts()
         time.sleep(2)
