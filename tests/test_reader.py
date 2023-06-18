@@ -47,3 +47,17 @@ class RedditReaderTestCase(unittest.TestCase):
 
     def test_is_sub_nsfw(self):
         self.assertTrue(RedditReader.is_sub_nsfw('gonewildaudio'))
+
+    def test_get_subreddit_ident(self):
+        tests = [
+            ['https://www.reddit.com/r/explainlikelimfive', 'explainlikelimfive'],
+            ['/r/modsupport', 'modsupport'],
+            ['http://old.reddit.com/r/redditalternatives', 'redditalternatives'],
+        ]
+
+        for link, expected in tests:
+            try:
+                ident = RedditReader.get_subreddit_ident(link)
+            except ValueError as e:
+                ident = str(e)
+            self.assertEqual(expected, ident)

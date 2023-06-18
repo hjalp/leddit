@@ -4,7 +4,8 @@ A Reddit-to-Lemmy cross-poster.
 
 ## To do:
 - MORE TESTS!
-- monitor `!requests` community for new subreddits to sync
+- Harden Subreddit-Request handling
+  - (skip existing. Duh!)
 - Create a watcher that periodically checks for updates (edits / deletes) on reddit post and sync those:
   * 1 hour, day, week, month after posting.
   * Automatically when reported (Unless queued in last hour, to prevent abuse)

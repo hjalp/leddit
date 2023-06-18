@@ -17,7 +17,7 @@ _DELAY_TIME = 3  # This many seconds between requests
 
 
 class RedditReader:
-    _SUBREDDIT_REGEX = re.compile(r'path.com/r/([^/]+)/.*')
+    _SUBREDDIT_REGEX = re.compile(r'(.*reddit\.com|^)/r/([^/]+).*')
     _STRIP_EMPTY_REGEX = re.compile(r'\n{3,}')
     _next_request_after: int  # Updated on requests to reddit to prevent throttling
 
@@ -81,7 +81,7 @@ class RedditReader:
         return post
 
     def get_subreddit_info(self, ident: str) -> Optional[CommunityDTO]:
-        sub_url = f"https://old.reddit.com/r/{ident}"
+        sub_url = f"https://old.reddit.com/r/{ident}/"
         response = self._request('GET', sub_url)
         if response.status_code != 200:
             return None
@@ -89,7 +89,12 @@ class RedditReader:
         soup = BeautifulSoup(response.text, "html.parser")
 
         icon_elm = soup.select_one('img#header-img[src]')
-        icon = icon_elm['src'] if icon_elm else None
+        if icon_elm:
+            icon = icon_elm['src']
+            if icon.startswith('//'):
+                icon = 'https:' + icon
+        else:
+            icon = None
 
         title = soup.select_one('head>title').text
         description = soup.select_one('head>meta[name="description"][content]')['content']
@@ -102,9 +107,9 @@ class RedditReader:
         """Extract the subreddit string from a path post"""
         match = cls._SUBREDDIT_REGEX.search(link)
         if match:
-            return match.group(1)
+            return match.group(2)
         else:
-            raise ValueError("No subreddit found in the reddit_link")
+            raise ValueError(f"No subreddit found in {link}")
 
     def _html_node_to_markdown(self, source: Tag) -> Optional[str]:
         """Convert the contents of a BeautifulSoup Tag into markdown"""
