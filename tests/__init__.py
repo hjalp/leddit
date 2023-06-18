@@ -20,3 +20,9 @@ TEST_POSTS = [
     PostDTO(reddit_link='https://red.dit/3', title="post 3", author='/u/user3', created=utc_now, updated=utc_now), ]
 
 LEMMY_POST_RETURN = {'post_view': {'post': {'ap_id': 5, 'body': 'blabla'}}}
+
+
+def get_test_data(filename: str) -> str:
+    file_path = os.path.join(os.path.dirname(__file__), 'data', filename)
+    with open(file_path, 'r') as file:
+        return file.read()

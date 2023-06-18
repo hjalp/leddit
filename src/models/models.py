@@ -11,6 +11,15 @@ SORT_HOT = 'hot'
 SORT_NEW = 'new'
 
 
+@dataclass
+class CommunityDTO:
+    ident: str
+    title: str
+    description: str
+    icon: str
+    nsfw: bool
+
+
 class Community(Base):
     """Represents a community/subreddit on both Lemmy and Reddit"""
 
