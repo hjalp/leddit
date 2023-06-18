@@ -39,11 +39,11 @@ class RedditReaderTestCase(unittest.TestCase):
             description='You learn something new every day; what did you '
                         'learn today? Submit interesting and specific facts '
                         'about something that you just found out here.',
-            icon="//b.thumbs.redditmedia.com/pskDeiR7LPmkU3Vq1HSBs6Y0geRbSTAQiz23AwVppbs.jpg",
+            icon="https://b.thumbs.redditmedia.com/pskDeiR7LPmkU3Vq1HSBs6Y0geRbSTAQiz23AwVppbs.jpg",
             nsfw=False
         ))
         self.subject.is_sub_nsfw.assert_called_once_with('todayilearned')
-        self.subject._request.assert_called_once_with('GET', 'https://old.reddit.com/r/todayilearned')
+        self.subject._request.assert_called_once_with('GET', 'https://old.reddit.com/r/todayilearned/')
 
     def test_is_sub_nsfw(self):
         self.assertTrue(RedditReader.is_sub_nsfw('gonewildaudio'))
