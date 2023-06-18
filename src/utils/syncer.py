@@ -75,10 +75,14 @@ class Syncer:
     def filter_posted(self, posts: List[PostDTO]) -> List[PostDTO]:
         """Filter out any posts that have already been synced to Lemmy"""
         reddit_links = [post.reddit_link for post in posts]
-        existing_links = self._db.query(Post.reddit_link).filter(Post.reddit_link.in_(reddit_links)).all()
-        existing_links = [link[0] for link in existing_links]
+        existing_links_raw = self._db.query(Post.reddit_link).filter(Post.reddit_link.in_(reddit_links)).all()
+        existing_links = [link[0] for link in existing_links_raw]
 
-        filtered_posts = [post for post in posts if post.reddit_link not in existing_links]
+        # filtered_posts = [post for post in posts if post.reddit_link not in existing_links]
+        filtered_posts = []
+        for post in posts:
+            if post.reddit_link not in existing_links:
+                filtered_posts.append(post)
         return filtered_posts
 
     def clone_to_lemmy(self, post: PostDTO, community: Community):
