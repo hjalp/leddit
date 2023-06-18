@@ -110,9 +110,11 @@ class Syncer:
         if self.new_sub_check is not None and (self.new_sub_check + NEW_SUB_CHECK_INTERVAL) > time.time():
             self._logger.debug('Not time yet for subreddit request check')
             return
+        self._logger.info('Checking for new subreddit requests...')
 
         posts = self._get_new_sub_requests()
         for post in posts:
+            self._logger.info('New subreddit request received')
             community = self._answer_sub_request(post)
             if community:
                 lemmy_community = self._lemmy.create_community(
@@ -183,7 +185,6 @@ The original was posted on [/r/{community.ident}]({post.reddit_link.replace('htt
                 ident = RedditReader.get_subreddit_ident(post['post']['name'])
             except ValueError:
                 pass
-
 
         # TODO: this should raise proper exceptions
         if ident:
