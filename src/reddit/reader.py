@@ -54,9 +54,10 @@ class RedditReader:
         for entry in feed.entries:
             created = datetime.fromisoformat(entry.published)
             updated = datetime.fromisoformat(entry.updated)
+            author = entry.author if 'author' in entry else '[deleted]'
             if not since or updated > since:
                 posts.append(PostDTO(reddit_link=entry.link, title=entry.title, created=created, updated=updated,
-                                     author=entry.author))
+                                     author=author))
         return posts
 
     def get_post_details(self, post: PostDTO) -> PostDTO:
@@ -74,7 +75,7 @@ class RedditReader:
         post.body = self._html_node_to_markdown(body_text) if body_text else None
 
         # Extract other properties
-        post_info = soup.select_one('div[data-timestamp][data-author][data-nsfw]')
+        post_info = soup.select_one('div[data-timestamp][data-nsfw]')
         post.nsfw = post_info['data-nsfw'] != 'false'
         post.external_link = None if post_info['data-url'].startswith('/r/') else post_info['data-url']
 
