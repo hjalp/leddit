@@ -4,7 +4,7 @@ A Reddit-to-Lemmy cross-poster.
 
 ## Known bugs:
 - When a time-out occurs on a post, it will not be posted again. Often, the post created successfully, but something goes wrong in the gateway. Proper solution would be to check afterwards.
-- When trying to scrape MuseumOfReddit: `Error trying to retrieve topics: object has no attribute 'author'`.
+- Posts to `/user/` subreddits are broken.
 
 ## To do:
 - MORE TESTS!
