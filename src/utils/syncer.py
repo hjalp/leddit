@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from operator import attrgetter
 from typing import Type, List, Optional
 
+from requests import HTTPError
 from sqlalchemy import or_
 from sqlalchemy.orm import Session as DbSession
 
@@ -95,9 +96,21 @@ class Syncer:
                 url=post.external_link,
                 nsfw=post.nsfw
             )
+        except HTTPError as e:
+            if e.response.status_code == 504 and 'Time-out' in str(e.response.text):
+                # ron_burgundy_-_I_dont_believe_you.gif
+                self._logger.warning(f'Timeout when trying to post {post.reddit_link}: {str(e)}\nSuuuure...')
+                # TODO: check if post was actually placed through a search.
+                #  If not, return, so it gets picked up next time
+                lemmy_post = {'post_view': {'post': {'ap_id': f'https://some.post.in/{community.ident}'}}}  # hack
+            else:
+                self._logger.error(
+                    f"HTTPError trying to post {post.reddit_link}: {str(e)}: {str(e.response.content)}"
+                )
+
         except Exception as e:
             self._logger.error(
-                f"Something went horribly wrong when parsing {post.reddit_link}: {str(e)}: {str(e.response.content)}"
+                f"Something went horribly wrong when posting {post.reddit_link}: {str(e)}: {str(e.response.content)}"
             )
             return
 
