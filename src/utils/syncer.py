@@ -145,6 +145,7 @@ class Syncer:
                 )
                 self._lemmy.mark_post_as_read(post_id=post['post']['id'], read=True)
         self.new_sub_check = int(time.time())
+        self._logger.info('Done.')
 
     @staticmethod
     def prepare_post(post: PostDTO, community: Community) -> PostDTO:
