@@ -113,7 +113,7 @@ class SyncerTestCase(unittest.TestCase):
         # Mock an exception to be raised by self._lemmy.create_post
         response = Response()
         response.status_code = 500
-        self.lemmy_api.create_post.side_effect = HTTPError( "Error", response=response)
+        self.lemmy_api.create_post.side_effect = HTTPError("Error", response=response)
 
         # Call the method being tested
         self.syncer.clone_to_lemmy(post, community)
@@ -126,11 +126,34 @@ class SyncerTestCase(unittest.TestCase):
             url='https://nope',
             nsfw=False
         )
-        self.syncer._logger.error.assert_called_once_with(
-            f"Something went horribly wrong when parsing https://red.dit/2: Error: None"
-        )
+        self.syncer._logger.error.assert_called_once_with('HTTPError trying to post https://red.dit/2: Error: None')
         self.db_session.add.assert_not_called()
         self.db_session.commit.assert_not_called()
+
+    def test_clone_to_lemmy_timeout_is_ignored(self):
+        # Mock the necessary objects
+        post = TEST_POSTS[1]
+        community = TEST_COMMUNITY
+
+        # Mock the return value of self.prepare_post
+        self.syncer.prepare_post.return_value = post
+
+        # Mock an exception to be raised by self._lemmy.create_post
+        response = MagicMock()
+        response.status_code = 504
+        response.text = b'<html>\r\n<head><title>504 Gateway Time-out</title></head>\r\n<body>\r\n<center><h1>504 ' \
+                        b'Gateway Time-out</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n'
+        self.lemmy_api.create_post.side_effect = HTTPError(
+            '504 Server Error: Gateway Time-out for url: https://foo.bar/api/v3/post', response=response
+        )
+
+        # Call the method being tested
+        self.syncer.clone_to_lemmy(post, community)
+
+        # Ensure logs and write to Database
+        self.syncer._logger.warning.assert_called_once()
+        self.db_session.add.assert_called()
+        self.db_session.commit.assert_called()
 
 
 if __name__ == '__main__':
