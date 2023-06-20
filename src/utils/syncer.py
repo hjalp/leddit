@@ -155,7 +155,7 @@ class Syncer:
 
                 self._lemmy.create_comment(
                     post_id=post['post']['id'],
-                    content=f"I'll get right on that. Check out [/c/{community.ident}](/c/{community.ident})!"
+                    content=f"I'll get right on that. Check out [/c/{community.ident}](/c/{community.ident}@lemmit.online)!"
                 )
                 self._lemmy.mark_post_as_read(post_id=post['post']['id'], read=True)
         self.new_sub_check = int(time.time())
