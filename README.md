@@ -1,8 +1,10 @@
 # Leddit
 
-An automated Reddit-to-Threadiverse crossposter based on [Lemmit](https://gitlab.com/sab_from_earth/lemmit). Leddit is named Leddit because it takes more from Reddit than Lemmit does. Specifically, it supports crossposting posts *and* comment threads from Reddit to Lemmy. Subreddit requesting is removed because of the delays caused by scraping and importing a high number of subreddits with the current application architecture. Leddit does not use the Reddit API and will remain functional after the API changes come into force July 1st, 2023.
+An automated Reddit-to-Threadiverse crossposter based on [Lemmit](https://gitlab.com/sab_from_earth/lemmit). Leddit is named Leddit because it takes more from Reddit than Lemmit does. Specifically, it supports crossposting posts *and* comment threads from Reddit to Lemmy. 
 
-It is **strongly recommended** to deploy this bot on a a dedicated instance with high rate limits, as depending on the subreddits being crossposted, it can generate an extremely high volume of requests, which will get rate limited on a normal instance and cause the bot to operate very slowly. The high activity from this bot can also disrupt federation and post ranking calculation.
+Leddit does not use the Reddit API and will remain functional after the API changes come into force July 1st, 2023.
+
+It is **strongly recommended** to deploy this bot on a a dedicated instance with high rate limits. The high activity from this bot can disrupt federation, post ranking calculation and activity on a populated instance.
 
 Contributions are welcome! If you have any ideas, suggestions, or bug reports, please open an issue or submit a pull request. You can also visit the [Lemmy support community](https://leddit.danmark.party/c/lounge) for this bot.
 
@@ -14,15 +16,21 @@ Contributions are welcome! If you have any ideas, suggestions, or bug reports, p
 
 1. Clone the repository:
 
-`git clone https://github.com/hjalp/leddit.git`
+```sh
+git clone https://github.com/hjalp/leddit.git
+```
 
 2. Navigate to the project directory:
 
-`cd leddit`
+```sh
+cd leddit
+```
 
 3. Install the dependencies:
 
-`pip install --no-cache-dir -r requirements.txt`
+```sh
+pip install --no-cache-dir -r requirements.txt
+```
 
 ## Configuration
 
@@ -32,7 +40,7 @@ The bot uses a `config.yaml` file to determine the settings for scraping and pos
 
 Example `config.yaml` file:
 
-```
+```yml
 lemmy_base_uri: https://lemmy.myinstance.com # The base instance URL without anything trailing like /api/v3/
 
 max_post_age: 86400 # Maximum age of a post (in seconds) before new comments will not be synced
@@ -75,7 +83,7 @@ Build the Leddit Docker image using the Dockerfile provided.
 
 Create and run the Docker container.
 
-```
+```sh
 docker run --name leddit \
 -v ./leddit:/app/data \
 -e DATABASE_URL=sqlite:///data/leddit.sqlite \
@@ -86,7 +94,7 @@ docker run --name leddit \
 
 If deploying with Compose, add this snippet under `services`.
 
-```
+```yml
   leddit:
     image: leddit:latest
     environment:
