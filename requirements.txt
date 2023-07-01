@@ -8,6 +8,8 @@ idna==3.4
 markdownify==0.11.6
 PyJWT==2.7.0
 python-dotenv==1.0.0
+pythorhead==0.10.0
+pyyaml==6.0.0
 requests==2.31.0
 sgmllib3k==1.0.0
 six==1.16.0

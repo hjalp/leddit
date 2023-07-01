@@ -13,5 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the contents of the src directory to the working directory in the container
 COPY src/ .
 
+# Copy config.yaml into the data folder
+COPY config.yaml ./data
+
 # Set the entry point for the container
 ENTRYPOINT [ "python", "main.py" ]

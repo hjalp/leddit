@@ -1,53 +1,43 @@
 import logging
-import time
+import re
 from datetime import datetime, timedelta
 from operator import attrgetter
 from typing import Type, List, Optional
 
 from requests import HTTPError
-from sqlalchemy import or_
+from sqlalchemy import and_
 from sqlalchemy.orm import Session as DbSession
 
-from lemmy.api import LemmyAPI
-from models.models import Community, PostDTO, Post, CommunityDTO, SORT_HOT
+from pythorhead import Lemmy
+from models.models import PostDTO, Post, CommentDTO, Comment
 from reddit.reader import RedditReader
+from utils.config import COMMUNITY_MAP, HEADER_POSITION, MAX_POST_AGE, LEMMY_BASE_URI
 
-NEW_SUB_CHECK_INTERVAL: int = 60
-
-
+_VALID_TITLE = re.compile(r".*\S{3,}.*")
 class Syncer:
-    interval: int = 120  # Time between updates per subreddit
-    new_sub_check: int = None  # Time between check for new subreddit requests
 
-    def __init__(self, db: DbSession, reddit_reader: RedditReader, lemmy: LemmyAPI, interval: int = 120,
-                 request_community: str = None):
+    def __init__(self, db: DbSession, reddit_reader: RedditReader, username: str, password: str):
+        
         self._db: DbSession = db
         self._reddit_reader: RedditReader = reddit_reader
-        self._lemmy: LemmyAPI = lemmy
-        self._logger = logging.getLogger(__name__)
-        self.interval = interval
-        self.request_community = request_community
-
-    def next_scrape_community(self) -> Optional[Type[Community]]:
-        """Get the next community that is due for scraping."""
-        return self._db.query(Community) \
-            .filter(
-            Community.enabled.is_(True),
-            or_(
-                Community.last_scrape <= datetime.utcnow() - timedelta(seconds=self.interval),
-                Community.last_scrape.is_(None)
-            )
-        ) \
-            .order_by(Community.last_scrape) \
-            .first()
+        self._lemmy = Lemmy(LEMMY_BASE_URI)
+        self._logger: logging.Logger = logging.getLogger(__name__)
+        self._username = username
+        self._password = password
 
     def scrape_new_posts(self):
-        community = self.next_scrape_community()
+        for com in COMMUNITY_MAP:
+            subreddit = com['subreddit']
+            community = com['community']
+            sort = com['sort']
+            post_header = com['post_header']
 
-        if community:
-            self._logger.info(f'Scraping subreddit: {community.ident}')
+            self._logger.info(f'Getting community ID: {community}')
+            community_id = self._lemmy.discover_community(community)
+
+            self._logger.info(f'Scraping subreddit: {subreddit}')
             try:
-                posts = self._reddit_reader.get_subreddit_topics(community.ident, mode=community.sorting)
+                posts = self._reddit_reader.get_subreddit_topics(subreddit, mode=sort)
             except BaseException as e:
                 self._logger.error(f"Error trying to retrieve topics: {str(e)}")
                 return
@@ -57,21 +47,58 @@ class Syncer:
             # Handle oldest entries first.
             posts = sorted(posts, key=attrgetter('updated'))
 
+            try:
+                self._lemmy.log_in(self._username, self._password)
+
+            except HTTPError as e:
+                self._logger.error(
+                    f"Couldn\'t log in to account {self._username} on {LEMMY_BASE_URI}."
+                )
+                return
+
             for post in posts:
                 self._logger.info(post)
                 try:
-                    post = self._reddit_reader.get_post_details(post)
+                    post, comments = self._reddit_reader.get_post_details(post)
                 except BaseException as e:
                     self._logger.error(f"Error trying to retrieve post details, try again in a bit; {str(e)}")
                     return
-                self.clone_to_lemmy(post, community)
+                post = self.clone_to_lemmy(post, subreddit, community_id, post_header)
+                
+                self.clone_comments_to_lemmy(post, comments)
 
-            self._logger.info(f'Done.')
-            community.last_scrape = datetime.utcnow()
-            self._db.add(community)
-            self._db.commit()
-        else:
-            self._logger.debug('No community due for update')
+    def update_comments(self):
+        """Remove old posts and update comments of posts"""
+        try:
+            self._lemmy.log_in(self._username, self._password)
+
+        except HTTPError as e:
+            self._logger.error(
+                f"Couldn\'t log in to account {self._username} on {LEMMY_BASE_URI}."
+            )
+            return
+
+        # Remove aged posts from the database
+        self.clear_aged()
+        db_post_list = self._db.query(Post).filter(Post.enabled.is_(True)).all()
+
+        for db_post in db_post_list:
+            self._logger.info(f'Updating post with ID {db_post.id}')
+            post = PostDTO(
+                reddit_link=db_post.reddit_link,
+                title='Unused',
+                created=db_post.created,
+                updated=db_post.updated,
+                author=db_post.author,
+                lemmy_id=db_post.id)
+            try:
+                post, comments = self._reddit_reader.get_post_details(post)
+            except BaseException as e:
+                self._logger.error(f"Error trying to retrieve updated comments for post {db_post.reddit_link}, try again in a bit; {str(e)}")
+                continue
+
+            filtered_comments = self.filter_posted_comments(comments)
+            self.clone_comments_to_lemmy(post, filtered_comments)
 
     def filter_posted(self, posts: List[PostDTO]) -> List[PostDTO]:
         """Filter out any posts that have already been synced to Lemmy"""
@@ -85,24 +112,63 @@ class Syncer:
             if post.reddit_link not in existing_links:
                 filtered_posts.append(post)
         return filtered_posts
+    
+    def filter_posted_comments(self, comments: List[CommentDTO]) -> List[CommentDTO]:
+        comment_ids = [comment.id for comment in comments]
+        existing_comments_raw = self._db.query(Comment.reddit_id).filter(Comment.reddit_id.in_(comment_ids)).all()
+        existing_comments = [comment[0] for comment in existing_comments_raw]
+        
+        filtered_comments = []
+        for comment in comments:
+           if comment.id not in existing_comments:
+              filtered_comments.append(comment)
+        return filtered_comments
+    
+    def clear_aged(self):
+        """Remove any posts and their comments that are older than the maximum update age from the database"""
+        aged_posts = self._db.query(Post).filter(Post.enabled.is_(True), and_(Post.created <= datetime.utcnow() - timedelta(seconds=MAX_POST_AGE))).all()
 
-    def clone_to_lemmy(self, post: PostDTO, community: Community):
-        post = self.prepare_post(post, community)
+        for aged_post in aged_posts:
+            try:
+                aged_comments = self._db.query(Comment).filter(Comment.post_id == aged_post.id)
+                for comment in aged_comments:
+                    self._db.delete(comment)
+                    self._db.commit()
+                
+                self._db.delete(aged_post)
+                self._db.commit()
+
+                self._logger.info(
+                    f"Deleted post {aged_post.id} and its comments from the database."
+                )
+            except Exception as e:
+                self._logger.error(
+                    f"Couldn't delete {aged_post.reddit_link} from the local database. {str(e)}"
+                )
+
+    def clone_to_lemmy(self, post: PostDTO, subreddit: str, community_id: int, post_header: str) -> PostDTO: # Returns PostDTO with Lemmy post ID
+
+        post = self.prepare_post(post, subreddit, post_header)
+        self._logger.info(
+            f"Attempting to post {post.reddit_link}..."
+        )
         try:
-            lemmy_post = self._lemmy.create_post(
-                community_id=community.lemmy_id,
+            lemmy_post = self._lemmy.post.create(
+                community_id=community_id,
                 name=post.title,
-                body=post.body,
                 url=post.external_link,
+                body=post.body,
                 nsfw=post.nsfw
             )
+
         except HTTPError as e:
-            if e.response.status_code == 504 and 'Time-out' in str(e.response.text):
+            if e.response.status_code == 504 or e.response.status_code == 502:
                 # ron_burgundy_-_I_dont_believe_you.gif
                 self._logger.warning(f'Timeout when trying to post {post.reddit_link}: {str(e)}\nSuuuure...')
                 # TODO: check if post was actually placed through a search.
                 #  If not, return, so it gets picked up next time
-                lemmy_post = {'post_view': {'post': {'ap_id': f'https://some.post.in/{community.ident}'}}}  # hack
+                previous_id = self._db.query(Post.id).order_by(Post.id.desc()).first()
+                lemmy_post = {'post_view': {'post': {'ap_id': f'{LEMMY_BASE_URI}/post/{previous_id + 1}', 'id': {previous_id + 1}}}}  # hack
             else:
                 self._logger.error(
                     f"HTTPError trying to post {post.reddit_link}: {str(e)}: {str(e.response.content)}"
@@ -111,119 +177,164 @@ class Syncer:
 
         except Exception as e:
             self._logger.error(
-                f"Something went horribly wrong when posting {post.reddit_link}: {str(e)}: {str(e.response.content)}"
+                # f"Something went horribly wrong when posting {post.reddit_link}: {str(e)}: {str(e.response.content)}"
+                f"Something went horribly wrong when posting {post.reddit_link}: {str(e)}"
             )
             return
-
-        # Save post
+        
         try:
-            db_post = Post(reddit_link=post.reddit_link, lemmy_link=lemmy_post['post_view']['post']['ap_id'],
-                           community=community, updated=datetime.utcnow(), nsfw=post.nsfw)
+            lemmy_link = lemmy_post['post_view']['post']['ap_id']
+            post.lemmy_id = lemmy_post['post_view']['post']['id']
+
+        except Exception as e: # hack
+            previous = self._db.query(Post.id).order_by(Post.id.desc()).first()
+            post.lemmy_id = previous[0] + 1
+            
+            lemmy_link = f'{LEMMY_BASE_URI}/post/{previous[0] + 1}'
+            self._logger.error(
+                f"""Leddit hit a HTTP Error when posting comment {post.reddit_link} and didn't receive a response: {str(e)}\n
+                However, it has likely been posted to Lemmy. Please do a check!\n
+                This post will be committed to the database."""
+            )
+
+        # Save post to database
+        try:
+            db_post = Post(
+                id=post.lemmy_id,
+                community_id=community_id,
+                reddit_link=post.reddit_link,
+                lemmy_link=lemmy_link,
+                created=post.created,
+                updated=datetime.utcnow(),
+                author=post.author,
+                enabled=1
+            )
             self._db.add(db_post)
             self._db.commit()
         except Exception as e:
-            print(f"Couldn't save {post.reddit_link} to local database. MUST REMOVE FROM LEMMY OR ELSE. {str(e)}")
+            self._logger.error(
+                f"Couldn't save {post.reddit_link} to local database. Please remove the existing post from Lemmy (or it will be duplicated next round). {str(e)}"
+            )
 
-    def check_new_subs(self):
-        if self.new_sub_check is not None and (self.new_sub_check + NEW_SUB_CHECK_INTERVAL) > time.time():
-            self._logger.debug('Not time yet for subreddit request check')
-            return
-        self._logger.info('Checking for new subreddit requests...')
+        return post
 
-        posts = self._get_new_sub_requests()
-        for post in posts:
-            self._logger.info('New subreddit request received')
-            community = self._answer_sub_request(post)
-            if community:
-                lemmy_community = self._lemmy.create_community(
-                    name=community.ident,
-                    title=community.title,
-                    description=community.description,
-                    icon=community.icon,
-                    nsfw=community.nsfw,
-                    posting_restricted_to_mods=True
+    def clone_comments_to_lemmy(self, post: PostDTO, comments: List[CommentDTO]):
+
+        comments_map = {}
+        previous = self._db.query(Comment.id).order_by(Comment.id.desc()).first()
+        id_counter = previous[0]
+
+        for comment in comments:
+            comment = self.prepare_comment(post.reddit_link, post.author, comment)
+            try:
+                parent_lemmy = None if comment.parent == comment.post_id else comments_map[comment.parent]
+
+            # Search comment database if parent comment has already been posted in a previous round
+            except KeyError:
+                result = self._db.query(Comment).filter(Comment.reddit_id == comment.parent).first()
+                parent_lemmy = result.id
+                comments_map[comment.parent] = parent_lemmy
+
+            self._logger.info(
+                f"Attempting to post {comment.id}..."
+            )
+            try:
+                lemmy_comment = self._lemmy.comment.create(
+                    content=comment.body,
+                    post_id=post.lemmy_id,
+                    parent_id=parent_lemmy
                 )
-                db_community = Community(
-                    lemmy_id=lemmy_community['community_view']['community']['id'],
-                    ident=community.ident,
-                    nsfw=community.nsfw,
-                    enabled=True,
-                    sorting=SORT_HOT
+
+            except HTTPError as e:
+                if e.response.status_code == 504 or e.response.status_code == 502:
+                    # ron_burgundy_-_I_dont_believe_you.gif
+                    self._logger.warning(f'Timeout or Bad Gateway when trying to post {post.reddit_link}: {str(e)}\nSuuuure...')
+                    # TODO: Refactor duplicates
+                    lemmy_comment = {'comment_view': {'comment': {'id': {id_counter + 1}}}}  # hack
+                else:
+                    self._logger.error(
+                        f"HTTPError trying to post {comment.id}: {str(e)}: {str(e.response.content)}"
+                    )
+                    continue
+
+            except Exception as e:
+                self._logger.error(
+                    f"Something went horribly wrong when posting {comment.id}: {str(e)}"
                 )
-                self._db.add(db_community)
+                continue
+
+            try:
+                lemmy_comment_id = lemmy_comment['comment_view']['comment']['id']
+                # Dictionary to map Reddit ID to Lemmy ID
+                comments_map[comment.id] = lemmy_comment_id
+            
+            except Exception as e: # hack
+                id_counter += 1
+                comments_map[comment.id] = id_counter
+                lemmy_comment_id = id_counter
+                self._logger.error(
+                    f"""Leddit hit a HTTP Error when posting comment {comment.id} and didn't receive a response: {str(e)}\n
+                    However, it has likely been posted to Lemmy. Please do a check!\n
+                    This comment will be committed to the database."""
+                )
+
+            # Save comment to database
+            try:
+                db_comment = Comment(
+                    id=lemmy_comment_id,
+                    reddit_id=comment.id,
+                    created=comment.created,
+                    post_id=post.lemmy_id
+                )
+                self._db.add(db_comment)
                 self._db.commit()
 
-                self._lemmy.create_comment(
-                    post_id=post['post']['id'],
-                    content=f"I'll get right on that. Check out [/c/{community.ident}](/c/{community.ident}@lemmit.online)!"
-                )
-                self._lemmy.mark_post_as_read(post_id=post['post']['id'], read=True)
-        self.new_sub_check = int(time.time())
-        self._logger.info('Done.')
+                id_counter = lemmy_comment_id
+
+            except Exception as e:
+                print(f"Couldn't save {comment.id} to local database. Please remove the existing comment from Lemmy (or it will be duplicated next round). {str(e)}")
+                continue
 
     @staticmethod
-    def prepare_post(post: PostDTO, community: Community) -> PostDTO:
-        prefix = f"""##### This is an automated archive made by the [Lemmit Bot](https://lemmit.online/).
-The original was posted on [/r/{community.ident}]({post.reddit_link.replace('https://www.', 'https://old.')}) by [{post.author}](https://old.reddit.com{post.author}) on {post.created}.\n"""
+    def prepare_post(post: PostDTO, subreddit: str, post_header: str) -> PostDTO:
+        prefix = f"""{post_header}\n
+[The original]({post.reddit_link.replace('https://www.', 'https://old.')}) was posted on [/r/{subreddit}](https://old.reddit.com/r/{subreddit}) by [{post.author}](https://old.reddit.com{post.author}) at {post.created}."""
         if len(post.title) >= 200:
             prefix = prefix + f"\n**Original Title**: {post.title}\n"
             post.title = post.title[:196] + '...'
+        # Lemmy post title filters
+        elif not _VALID_TITLE.match(post.title):
+            prefix = prefix + f"\n**Original Title**: {post.title}\n"
+            post.title = post.title.rstrip() + '...'
+        # Resolve Reddit crosspost links
+        if post.external_link and len(post.external_link) > 512:
+            prefix = prefix + f"\n**Original URL**: {post.external_link}\n"
+            post.external_link = None
+        if post.external_link and post.external_link.startswith('/'):
+            post.external_link = 'https://old.reddit.com' + post.external_link
 
-        post.body = prefix + ('***\n' + post.body if post.body else '')
+
+        if HEADER_POSITION == 'bottom':
+            post.body = (post.body + '\n***\n' if post.body else '') + prefix
+        else:
+            post.body = prefix + ('\n***\n' + post.body if post.body else '')
 
         if len(post.body) > 10000:
             post.body = post.body[:9800] + '...\n***\nContent cut off. Read original on ' + post.reddit_link
 
         return post
-
-    def _get_new_sub_requests(self):
-        posts = self._lemmy.get_posts(community_name=self.request_community, auth_required=True)
-
-        ret_posts = []
-
-        for post in posts['posts']:
-            if post['read']:
-                self._logger.debug(f"Already seen post {post['post']['name']}")
-                continue
-            ret_posts.append(post)
-
-        return ret_posts
-
-    def _answer_sub_request(self, post: dict) -> Optional[CommunityDTO]:
-        """Create a new Lemmy Community based on request post"""
-        # Try and extract the subreddit
-        ident = None
-        community = None
-        if post['post']['url']:
-            try:
-                ident = RedditReader.get_subreddit_ident(post['post']['url'])
-            except ValueError:
-                pass
-        elif post['post']['name']:
-            try:
-                ident = RedditReader.get_subreddit_ident(post['post']['name'])
-            except ValueError:
-                pass
-
-        # TODO: this should raise proper exceptions
-        if ident:
-            # Figure out if subreddit exists and is open
-            community = self._reddit_reader.get_subreddit_info(ident)
-            if not community:
-                self._logger.warning(f'Subreddit {ident} is not open for business')
-                self._lemmy.create_comment(
-                    post_id=post['post']['id'],
-                    content=f"I cannot access the *{ident}* subreddit. Make another request when it is accessible."
-                )
-            else:
-                self._logger.info(f'Success! Let\'s clone the sh!t out of {ident}')
-                return community
+    
+    @staticmethod
+    def prepare_comment(post_reddit_link: str, post_author: str, comment: CommentDTO) -> CommentDTO:
+        
+        if post_author == '/u/' + comment.author and post_author != '[deleted]':
+            prefix = f'**{comment.author} (OP)** at {comment.created} ID: `{comment.id}`'
         else:
-            self._logger.warning(f"Couldn't determine subreddit for request {post['post']['ap_id']}")
-            self._lemmy.create_comment(
-                post_id=post['post']['id'],
-                content=f"I don't know which subreddit you mean."
-            )
+            prefix = f'**{comment.author}** at {comment.created} ID: `{comment.id}`'
 
-        self._lemmy.mark_post_as_read(post_id=post['post']['id'], read=True)
-        return community
+        comment.body = prefix + ('\n***\n' + comment.body if comment.body else '')
+        
+        if len(comment.body) > 10000:
+            comment.body = comment.body[:9750] + '...\n***\nContent cut off. Read original on ' + post_reddit_link + comment.id
+
+        return comment

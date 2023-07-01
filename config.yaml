@@ -1,0 +1,19 @@
+lemmy_base_uri: https://lemmy.myinstance.com # The base instance URL without anything trailing like /api/v3/
+
+max_post_age: 86400 # Maximum age of a post (in seconds) before new comments will not be synced
+request_interval: 3 # Time (in seconds) between sending requests to fetch post information
+scrape_interval: 3600 # Time (in seconds) between updating comments on all posts and fetching new posts
+user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'
+
+header_position: top # Either 'top' or 'bottom'. Defaults to top if not provided
+
+community_map:
+  - subreddit: sweden # Name of the subreddit to crosspost from, without /r/
+    community: sweden # Name of the Lemmy community to crosspost to, without /c/ or domain
+    sort: new # Either 'new' or 'hot'. Defaults to new if not provided
+    post_header: '##### Det här inlägget arkiverades automatiskt av [Leddit-botten](https://github.com/hjalp/leddit). Vill du diskutera tråden? Joina vår Lemmy-gemenskap på [feddit.nu](https://feddit.nu)!'
+    # The text that appears above each cross-post's body
+  - subreddit: askreddit
+    community: asklemmy
+    sort: hot
+    post_header: '##### This is an automated archive made by the [Leddit Bot](https://github.com/hjalp/leddit). Want to discuss this thread? Join our Lemmy community on [/c/asklemmy on My Lemmy Instance](https://lemmy.instance.com/c/asklemmy)!'
