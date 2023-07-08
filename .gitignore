@@ -1,5 +1,5 @@
 /.env
-/src/data/**
+**/config.yaml
 **/leddit.sqlite
 .pytest_cache
 **/__pycache__

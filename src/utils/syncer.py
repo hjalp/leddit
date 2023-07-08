@@ -222,7 +222,10 @@ class Syncer:
 
         comments_map = {}
         previous = self._db.query(Comment.id).order_by(Comment.id.desc()).first()
-        id_counter = previous[0]
+        try:
+            id_counter = previous[0]
+        except TypeError:
+            id_counter = 1 # hack of a hack
 
         for comment in comments:
             comment = self.prepare_comment(post.reddit_link, post.author, comment)

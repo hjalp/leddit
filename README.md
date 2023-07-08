@@ -6,7 +6,7 @@ Leddit does not use the Reddit API and will remain functional after the API chan
 
 It is **strongly recommended** to deploy this bot on a a dedicated instance with high rate limits. The high activity from this bot can disrupt federation, post ranking calculation and activity on a populated instance.
 
-Contributions are welcome! If you have any ideas, suggestions, or bug reports, please open an issue or submit a pull request. You can also visit the [Lemmy support community](https://leddit.danmark.party/c/lounge) for this bot.
+Contributions are welcome! If you have any ideas, suggestions, or bug reports, please open an issue or submit a pull request. You can also visit the [Lemmy support community](https://leddit.danmark.party/c/lounge) for this bot or [DM me on Lemmy](https://leddit.danmark.party/u/Andreas) if you need something answered privately.
 
 ## Prerequisites
 
@@ -73,13 +73,17 @@ Adjust the values in the `config.yaml` file according to your requirements and m
 
 Run the bot.
 
-`python /home/user/location-of-leddit-installation/src/main.py`
+```sh
+python /home/user/location-of-leddit-installation/src/main.py
+```
 
 ## Deployment with Docker
 
 Build the Leddit Docker image using the Dockerfile provided.
 
-`docker build -t leddit:latest /home/user/location-of-leddit-installation`
+```sh
+docker build -t leddit:latest /home/user/location-of-leddit-installation
+```
 
 Create and run the Docker container.
 
